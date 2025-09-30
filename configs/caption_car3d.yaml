@@ -1,0 +1,25 @@
+image_root: 'datasets/car3d/images'
+ann_root: 'datasets/car3d/annotations'
+coco_gt_root: 'datasets/car3d/annotations'
+
+# LIGHTER MODEL FOR SIMPLE CAPTIONS
+pretrained: 'https://storage.googleapis.com/sfr-vision-language-research/BLIP/models/model_large_caption.pth'
+vit: 'large'                    # Base instead of large (much faster)
+vit_ckpt_layer: 0
+vit_grad_ckpt: false
+
+# OPTIMIZED FOR SPEED
+batch_size: 16                 # Double batch size (RTX 3090 can handle it)
+image_size: 256                # Smaller resolution (simple captions don't need 512px)
+
+# EFFICIENT OVERFITTING
+max_epoch: 10                  # Fewer epochs (simple captions learn faster)
+init_lr: 2e-5                  # Higher learning rate for faster convergence
+min_lr: 1e-7
+weight_decay: 0.005            # Slightly less regularization
+
+# SIMPLER GENERATION
+max_length: 25                 # Shorter max length (your captions are ~15 tokens)
+min_length: 5
+num_beams: 3                   # Fewer beams for speed
+prompt: 'a 3d rendered car '
