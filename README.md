@@ -340,8 +340,7 @@ This project builds upon the original BLIP repository:
 For questions or support regarding this Car3D project:
 
 - **Issues:** Open a GitHub issue
-- **Email:** [your-email@domain.com]
-- **Demo:** [Live Demo Link]
+- **Email:** difarobbbani267@gmail.com
 
 ---
 
