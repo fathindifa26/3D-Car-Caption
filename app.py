@@ -8,7 +8,7 @@ import os
 from models.blip import blip_decoder
 
 # Configuration
-CHECKPOINT_PATH = "/home/comtrue/PycharmProjects/Difa/SMARTM2M/BLIP/output/Car3D_Test/checkpoint_04.pth"
+CHECKPOINT_PATH = "checkpoint_04.pth"
 
 @st.cache_resource
 def load_trained_model():
@@ -159,4 +159,5 @@ def main():
     st.markdown("**Built with BLIP model • Trained on 3D car dataset**")
 
 if __name__ == '__main__':
+
     main()
