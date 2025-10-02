@@ -6,7 +6,7 @@ from torchvision.transforms.functional import InterpolationMode
 import os
 
 # Configuration  
-CHECKPOINT_PATH = "https://drive.google.com/u/0/uc?id=1hr8cDHAJImLc6QNNa4fvQQHjdHoDyIj5&export=download&confirm=t"
+CHECKPOINT_PATH = "https://drive.usercontent.google.com/download?id=1hr8cDHAJImLc6QNNa4fvQQHjdHoDyIj5&export=download&authuser=0&confirm=t"
 
 @st.cache_resource
 def load_trained_model():
@@ -153,18 +153,34 @@ def load_trained_model():
                     st.info("🔄 Removing corrupted file and trying direct download...")
                     os.remove(ckpt_path)
                     
-                    # Try alternative Google Drive URL format
-                    alt_url = CHECKPOINT_PATH.replace('/uc?id=', '/u/0/uc?id=').replace('&export=download', '&export=download&confirm=t')
-                    st.info(f"🔄 Trying alternative URL: {alt_url}")
+                    # Try robust Google Drive download
+                    file_id = "1hr8cDHAJImLc6QNNa4fvQQHjdHoDyIj5"
+                    download_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&authuser=0&confirm=t"
+                    st.info(f"🔄 Trying Google Drive direct content URL...")
                     
                     import requests
-                    with requests.get(alt_url, stream=True) as r:
-                        r.raise_for_status()
-                        with open(ckpt_path, 'wb') as f:
-                            for chunk in r.iter_content(chunk_size=8192):
-                                if chunk:
-                                    f.write(chunk)
-                    st.success("✅ File re-downloaded with alternative method")
+                    session = requests.Session()
+                    
+                    # First request to get the file
+                    response = session.get(download_url, stream=True)
+                    
+                    # Handle virus scan warning if large file
+                    if 'confirm' in response.text:
+                        st.info("📋 Handling Google Drive virus scan confirmation...")
+                        for line in response.text.splitlines():
+                            if 'confirm=' in line and 'download' in line:
+                                confirm_token = line.split('confirm=')[1].split('&')[0]
+                                download_url += f"&confirm={confirm_token}"
+                                break
+                        response = session.get(download_url, stream=True)
+                    
+                    # Download the file
+                    response.raise_for_status()
+                    with open(ckpt_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    st.success("✅ File re-downloaded successfully!")
         except Exception as debug_e:
             st.warning(f"Debug error: {debug_e}")
         
