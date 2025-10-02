@@ -5,8 +5,8 @@ from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 import os
 
-# Configuration
-CHECKPOINT_PATH = "https://drive.google.com/uc?id=1hr8cDHAJImLc6QNNa4fvQQHjdHoDyIj5&export=download"
+# Configuration  
+CHECKPOINT_PATH = "https://drive.google.com/u/0/uc?id=1hr8cDHAJImLc6QNNa4fvQQHjdHoDyIj5&export=download&confirm=t"
 
 @st.cache_resource
 def load_trained_model():
@@ -138,6 +138,36 @@ def load_trained_model():
             return None, dummy_config, device
 
         st.info(f"🔄 Loading checkpoint from: `{ckpt_path}`")
+        
+        # Debug: Check file content first
+        try:
+            with open(ckpt_path, 'rb') as f:
+                first_bytes = f.read(100)
+                st.info(f"🔍 First 100 bytes: {first_bytes[:50]}...")
+                
+            # Check if file looks like HTML (Google Drive error page)
+            with open(ckpt_path, 'r', encoding='utf-8', errors='ignore') as f:
+                first_text = f.read(200)
+                if '<html>' in first_text.lower() or '<!doctype' in first_text.lower():
+                    st.error("❌ Downloaded file is HTML (Google Drive redirect issue)")
+                    st.info("🔄 Removing corrupted file and trying direct download...")
+                    os.remove(ckpt_path)
+                    
+                    # Try alternative Google Drive URL format
+                    alt_url = CHECKPOINT_PATH.replace('/uc?id=', '/u/0/uc?id=').replace('&export=download', '&export=download&confirm=t')
+                    st.info(f"🔄 Trying alternative URL: {alt_url}")
+                    
+                    import requests
+                    with requests.get(alt_url, stream=True) as r:
+                        r.raise_for_status()
+                        with open(ckpt_path, 'wb') as f:
+                            for chunk in r.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
+                    st.success("✅ File re-downloaded with alternative method")
+        except Exception as debug_e:
+            st.warning(f"Debug error: {debug_e}")
+        
         # PyTorch 2.6+ requires weights_only=False for model checkpoints
         try:
             checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
