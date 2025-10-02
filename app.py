@@ -38,29 +38,38 @@ def load_trained_model(_try_real_model=False):
         local_ckpt = os.path.join(cache_dir, f'ckpt_{url_hash}.pth')
         
         if not os.path.exists(local_ckpt):
-            st.info("📥 Downloading checkpoint from Google Drive...")
+            st.warning("� **DOWNLOADING MODEL** - This may take a few minutes...")
             
-            # Simple download with progress
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            response = requests.get(CHECKPOINT_PATH, stream=True)
-            response.raise_for_status()
-            
-            downloaded = 0
-            with open(local_ckpt, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        progress_bar.progress(min(downloaded / (50 * 1024 * 1024), 1.0))  # Assume ~50MB
-                        status_text.text(f"Downloaded: {downloaded // (1024*1024):.1f}MB")
-            
-            progress_bar.progress(1.0)
-            status_text.text("✅ Download completed!")
-            st.success(f"Checkpoint saved to cache!")
+            # Create download progress display
+            download_container = st.container()
+            with download_container:
+                st.info("📥 Downloading checkpoint from Google Drive...")
+                progress_bar = st.progress(0, text="Starting download...")
+                status_text = st.empty()
+                
+                # Start download
+                response = requests.get(CHECKPOINT_PATH, stream=True)
+                response.raise_for_status()
+                
+                downloaded = 0
+                total_size = 50 * 1024 * 1024  # Assume 50MB
+                
+                with open(local_ckpt, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            
+                            # Update progress
+                            progress = min(downloaded / total_size, 1.0)
+                            progress_bar.progress(progress, text=f"Downloaded: {downloaded // (1024*1024):.1f}MB / ~50MB")
+                            status_text.success(f"⬇️ Speed: {len(chunk)/1024:.1f} KB/chunk")
+                
+                progress_bar.progress(1.0, text="✅ Download completed!")
+                status_text.success("🎉 Model successfully downloaded and cached!")
+                st.balloons()  # Celebration!
         else:
-            st.info("✅ Checkpoint found in cache!")
+            st.success("✅ Using cached model - Loading instantly!")
         
         # Check if file is valid (not HTML)
         with open(local_ckpt, 'rb') as f:
@@ -84,28 +93,34 @@ def load_trained_model(_try_real_model=False):
             raise Exception(f"BLIP import failed: {e}")
         
         # Load checkpoint
-        st.info("🔄 Loading checkpoint...")
-        try:
-            checkpoint = torch.load(local_ckpt, map_location=device, weights_only=False)
-        except TypeError:
-            checkpoint = torch.load(local_ckpt, map_location=device)
+        with st.status("🔄 Loading AI model checkpoint...", expanded=True) as status:
+            st.write("📂 Reading checkpoint file...")
+            try:
+                checkpoint = torch.load(local_ckpt, map_location=device, weights_only=False)
+            except TypeError:
+                checkpoint = torch.load(local_ckpt, map_location=device)
+            
+            config = checkpoint['config']
+            st.write(f"⚙️ Config: {config}")
+            
+            st.write("🏗️ Creating BLIP model architecture...")
+            # Create model
+            model = blip_decoder(
+                pretrained='',
+                image_size=config['image_size'],
+                vit=config['vit'],
+                prompt=config.get('prompt', 'a 3d rendered car ')
+            )
+            
+            st.write("🔗 Loading trained weights...")
+            model.load_state_dict(checkpoint['model'])
+            model.eval()
+            model = model.to(device)
+            
+            st.write(f"🚀 Model ready on {device}!")
+            status.update(label="✅ AI Model loaded successfully!", state="complete", expanded=False)
         
-        config = checkpoint['config']
-        st.success(f"✅ Config loaded: {config}")
-        
-        # Create model
-        model = blip_decoder(
-            pretrained='',
-            image_size=config['image_size'],
-            vit=config['vit'],
-            prompt=config.get('prompt', 'a 3d rendered car ')
-        )
-        
-        model.load_state_dict(checkpoint['model'])
-        model.eval()
-        model = model.to(device)
-        
-        st.success(f"🚀 Model loaded successfully on {device}!")
+        st.success("🎯 **Real AI Model Active** - Ready to generate actual captions!")
         return model, config, device
         
     except Exception as e:
@@ -190,8 +205,25 @@ def main():
     # Model loading option (outside of cached function)
     try_real_model = st.checkbox("🚀 Try to load real AI model (from Google Drive)", value=False, key="load_model")
     
+    # Show status based on checkbox
+    if try_real_model:
+        st.info("🔥 **Real AI Mode Activated!** - Preparing to load trained model...")
+        
+        # Check if model needs to be downloaded
+        import hashlib
+        url_hash = hashlib.md5(CHECKPOINT_PATH.encode()).hexdigest()
+        cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'blip_ckpt')
+        local_ckpt = os.path.join(cache_dir, f'ckpt_{url_hash}.pth')
+        
+        if not os.path.exists(local_ckpt):
+            st.warning("📥 **First time setup** - Model will be downloaded (~50MB)")
+        else:
+            st.success("✅ **Model cached** - Loading from local storage")
+    else:
+        st.info("🎭 **Demo Mode** - Using dummy captions for stability")
+    
     # Load model
-    with st.spinner("Loading AI model..."):
+    with st.spinner("Loading AI model..." if try_real_model else "Initializing demo mode..."):
         model, config, device = load_trained_model(try_real_model)
     
     # Create columns for layout
