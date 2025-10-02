@@ -5,69 +5,155 @@ from torchvision import transforms
 from torchvision.transforms.functional import InterpolationMode
 import os
 
-from models.blip import blip_decoder
-
 # Configuration
-CHECKPOINT_PATH = "checkpoint_04.pth"
+CHECKPOINT_PATH = "https://drive.google.com/uc?id=1hr8cDHAJImLc6QNNa4fvQQHjdHoDyIj5&export=download"
 
 @st.cache_resource
 def load_trained_model():
-    """Load trained BLIP model (cached for performance)"""
+    """Load trained BLIP model (cached for performance) - supports local file or Google Drive URL"""
+    import torch
+    import hashlib
+    import urllib
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
+
+    def is_url(path):
+        return path.startswith('http://') or path.startswith('https://')
+
+    # If checkpoint is a URL, download to cache
+    ckpt_path = CHECKPOINT_PATH
+    if is_url(CHECKPOINT_PATH):
+        # Use hash of URL for cache filename
+        url_hash = hashlib.md5(CHECKPOINT_PATH.encode()).hexdigest()
+        cache_dir = os.path.join(os.path.expanduser('~'), '.cache', 'blip_ckpt')
+        os.makedirs(cache_dir, exist_ok=True)
+        local_ckpt = os.path.join(cache_dir, f'ckpt_{url_hash}.pth')
+        if not os.path.exists(local_ckpt):
+            try:
+                import requests
+                st.info(f"Downloading checkpoint from Google Drive... (this may take a while)")
+                with requests.get(CHECKPOINT_PATH, stream=True) as r:
+                    r.raise_for_status()
+                    with open(local_ckpt, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                st.success(f"Checkpoint downloaded to {local_ckpt}")
+            except Exception as e:
+                st.warning(f"⚠️ Could not download checkpoint: {str(e)}")
+                dummy_config = {
+                    'image_size': 256,
+                    'vit': 'large',
+                    'prompt': 'a 3d rendered car ',
+                    'max_length': 25,
+                    'min_length': 5
+                }
+                return None, dummy_config, device
+        ckpt_path = local_ckpt
+
+    if not os.path.exists(ckpt_path):
+        st.warning("⚠️ Model checkpoint not found. Running in DEMO mode.")
+        dummy_config = {
+            'image_size': 256,
+            'vit': 'large',
+            'prompt': 'a 3d rendered car ',
+            'max_length': 25,
+            'min_length': 5
+        }
+        return None, dummy_config, device
+
     try:
-        # Load checkpoint
-        checkpoint = torch.load(CHECKPOINT_PATH, map_location=device)
+        try:
+            from models.blip import blip_decoder
+            print("BLIP model imported successfully.")
+        except ImportError:
+            st.warning("⚠️ BLIP model not available. Running in DEMO mode.")
+            dummy_config = {
+                'image_size': 256,
+                'vit': 'large',
+                'prompt': 'a 3d rendered car ',
+                'max_length': 25,
+                'min_length': 5
+            }
+            return None, dummy_config, device
+
+        checkpoint = torch.load(ckpt_path, map_location=device)
         config = checkpoint['config']
-        
-        # Create model with same config as training
         model = blip_decoder(
             pretrained='',
-            image_size=config['image_size'], 
+            image_size=config['image_size'],
             vit=config['vit'],
             prompt=config.get('prompt', 'a 3d rendered car ')
         )
-        
-        # Load trained weights
         model.load_state_dict(checkpoint['model'])
         model.eval()
         model = model.to(device)
-        
         return model, config, device
-        
     except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
-        st.error(f"Make sure checkpoint exists at: {CHECKPOINT_PATH}")
-        return None, None, None
+        st.warning(f"⚠️ Could not load model: {str(e)}")
+        st.info("Running in DEMO mode for UI preview")
+        dummy_config = {
+            'image_size': 256,
+            'vit': 'large',
+            'prompt': 'a 3d rendered car ',
+            'max_length': 25,
+            'min_length': 5
+        }
+        return None, dummy_config, device
 
 def preprocess_image(image, image_size, device):
-    """Preprocess uploaded image for model"""
-    # Convert to RGB if needed
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
+    """Preprocess uploaded image for model - DUMMY SAFE VERSION"""
+    try:
+        # Convert to RGB if needed
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        # Define transform (same as training)
+        transform = transforms.Compose([
+            transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BICUBIC),
+            transforms.ToTensor(),
+            transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
+        ])
+        
+        # Apply transform
+        processed_image = transform(image).unsqueeze(0).to(device)
+        return processed_image
+    except Exception as e:
+        st.error(f"Error preprocessing image: {e}")
+        return None
+
+def generate_caption_dummy(image_name="uploaded_image.jpg"):
+    """Generate dummy caption for demo purposes"""
+    import random
     
-    # Define transform (same as training)
-    transform = transforms.Compose([
-        transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BICUBIC),
-        transforms.ToTensor(),
-        transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711))
-    ])
+    dummy_captions = [
+        "a 3d rendered car with closed doors",
+        "a 3d rendered car with front left door open", 
+        "a 3d rendered car with hood open",
+        "a 3d rendered car with front doors open",
+        "a 3d rendered car with rear doors open",
+        "a 3d rendered car with all doors open"
+    ]
     
-    # Apply transform
-    processed_image = transform(image).unsqueeze(0).to(device)
-    return processed_image
+    return random.choice(dummy_captions)
 
 def generate_caption(model, image, config, num_beams=3):
-    """Generate caption for image"""
-    with torch.no_grad():
-        caption = model.generate(
-            image, 
-            sample=False, 
-            num_beams=num_beams,
-            max_length=config.get('max_length', 25),
-            min_length=config.get('min_length', 5)
-        )
-        return caption[0]
+    """Generate caption for image - WITH DUMMY FALLBACK"""
+    if model is None:
+        # DEMO MODE - Return dummy caption
+        return generate_caption_dummy()
+    
+    try:
+        with torch.no_grad():
+            caption = model.generate(
+                image, 
+                sample=False, 
+                num_beams=num_beams,
+                max_length=config.get('max_length', 25),
+                min_length=config.get('min_length', 5)
+            )
+            return caption[0]
+    except Exception as e:
+        st.error(f"Error generating caption: {e}")
+        return generate_caption_dummy()
 
 def main():
     # Page config
@@ -81,21 +167,31 @@ def main():
     st.title("🚗 3D Car Caption Generator")
     st.markdown("Upload an image of a 3D rendered car and get AI-generated caption describing door status!")
     
-    # Load model
+    # Load model (with dummy fallback)
     with st.spinner("Loading AI model..."):
         model, config, device = load_trained_model()
     
+    # Show model status
     if model is None:
-        st.error("Failed to load model. Please check the checkpoint path.")
-        st.stop()
+        st.info("🎭 **DEMO MODE ACTIVE** - UI Preview (Model not loaded)")
+    else:
+        st.success("✅ **AI MODEL LOADED** - Ready for real predictions!")
     
     # Display model info
     with st.expander("ℹ️ Model Information"):
+        if model is not None:
+            st.write(f"**Status:** ✅ Model Loaded Successfully")
+        else:
+            st.write(f"**Status:** 🎭 Demo Mode (Model Not Available)")
+        
         st.write(f"**Checkpoint:** checkpoint_04.pth")
         st.write(f"**Image Size:** {config['image_size']}px")
         st.write(f"**Model Type:** {config['vit']}")
         st.write(f"**Prompt:** {config['prompt']}")
         st.write(f"**Device:** {device}")
+        
+        if model is None:
+            st.warning("⚠️ Running in demo mode - predictions will be random examples")
     
     # File upload
     st.subheader("📤 Upload Image")
@@ -118,31 +214,58 @@ def main():
         with col2:
             st.subheader("🤖 AI Prediction")
             
+            # Show prediction status
+            if model is None:
+                st.info("🎭 Demo mode - will generate example caption")
+            else:
+                st.info("✅ Real AI model - will generate actual prediction")
+            
             # Generation settings
             with st.expander("⚙️ Generation Settings"):
                 num_beams = st.slider("Number of beams", min_value=1, max_value=10, value=3)
-                st.info("Higher beams = better quality but slower")
+                if model is None:
+                    st.warning("Demo mode: Settings visible but not functional")
+                else:
+                    st.info("Higher beams = better quality but slower")
             
             # Generate caption button
             if st.button("🎯 Generate Caption", type="primary"):
                 with st.spinner("Generating caption..."):
                     try:
-                        # Preprocess image
-                        processed_image = preprocess_image(image, config['image_size'], device)
-                        
-                        # Generate caption
-                        caption = generate_caption(model, processed_image, config, num_beams)
+                        if model is not None:
+                            # Real model prediction
+                            processed_image = preprocess_image(image, config['image_size'], device)
+                            if processed_image is not None:
+                                caption = generate_caption(model, processed_image, config, num_beams)
+                            else:
+                                caption = generate_caption_dummy()
+                        else:
+                            # Demo mode
+                            import time
+                            time.sleep(1)  # Simulate processing time
+                            caption = generate_caption_dummy()
                         
                         # Display result
-                        st.success("Caption generated successfully!")
+                        if model is not None:
+                            st.success("Caption generated successfully!")
+                        else:
+                            st.success("Demo caption generated! (This is a sample result)")
+                        
                         st.markdown(f"### 💬 Generated Caption:")
                         st.markdown(f"**{caption}**")
                         
                         # Additional info
-                        st.info(f"Generated using {num_beams} beams")
+                        if model is not None:
+                            st.info(f"Generated using {num_beams} beams")
+                        else:
+                            st.warning(f"🎭 Demo mode - Random example caption (beams setting: {num_beams})")
                         
                     except Exception as e:
                         st.error(f"Error generating caption: {str(e)}")
+                        st.info("Falling back to demo caption...")
+                        caption = generate_caption_dummy()
+                        st.markdown(f"### 💬 Fallback Caption:")
+                        st.markdown(f"**{caption}**")
     
     # Examples section
     st.subheader("📋 Example Usage")
@@ -152,12 +275,17 @@ def main():
     - "a 3d rendered car with front left door open"
     - "a 3d rendered car with hood open"
     - "a 3d rendered car with front doors open"
+    - "a 3d rendered car with rear doors open"
+    - "a 3d rendered car with all doors open"
     """)
     
-    # Footer
+    # Status footer
     st.markdown("---")
-    st.markdown("**Built with BLIP model • Trained on 3D car dataset**")
+    if model is not None:
+        st.markdown("**✅ Status: AI Model Loaded • Built with BLIP • Trained on 3D car dataset**")
+    else:
+        st.markdown("**🎭 Status: Demo Mode • Built with BLIP • Trained on 3D car dataset**")
+        st.caption("Note: Upload any image to see the UI in action (results will be demo examples)")
 
 if __name__ == '__main__':
-
     main()
