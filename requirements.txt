@@ -2,7 +2,6 @@ torch
 torchvision
 timm==0.4.12
 transformers==4.24.0
-tokenizers==0.14.1
 fairscale==0.4.4
 pycocoevalcap
 ruamel.yaml
