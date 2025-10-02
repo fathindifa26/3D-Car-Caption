@@ -1,9 +1,10 @@
-torch
-torchvision
+torch==2.0.1
+torchvision==0.15.2
 timm==0.4.12
-transformers==4.21.0
-fairscale
-ruamel.yaml
+transformers==4.15.0
+tokenizers==0.10.3
+fairscale==0.4.4
+ruamel.yaml==0.17.21
 streamlit
 requests
 Pillow
