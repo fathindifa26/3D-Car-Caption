@@ -2,6 +2,7 @@ torch
 torchvision
 timm==0.4.12
 transformers>=4.35.0
+fairscale
 ruamel.yaml
 streamlit
 requests
