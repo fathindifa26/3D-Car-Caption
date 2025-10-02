@@ -82,11 +82,37 @@ def load_trained_model():
 
     try:
         try:
+            # Try import dengan handling fairscale missing
+            import sys
+            import importlib.util
+            
+            # Add models to Python path jika belum ada
+            models_path = os.path.join(os.getcwd(), 'models')
+            if models_path not in sys.path:
+                sys.path.insert(0, models_path)
+            
+            # Check for fairscale and create mock if needed
+            try:
+                import fairscale
+                st.info("✅ Fairscale available")
+            except ImportError:
+                st.warning("⚠️ Fairscale not available, creating mock...")
+                # Create minimal fairscale mock
+                import types
+                fairscale_mock = types.ModuleType('fairscale')
+                fairscale_nn = types.ModuleType('fairscale.nn')
+                fairscale_nn.FusedLayerNorm = torch.nn.LayerNorm  # Fallback to standard LayerNorm
+                fairscale_mock.nn = fairscale_nn
+                sys.modules['fairscale'] = fairscale_mock
+                sys.modules['fairscale.nn'] = fairscale_nn
+                st.info("✅ Fairscale mock created")
+            
             from models.blip import blip_decoder
-            st.info("✅ BLIP model imported successfully!")
+            st.success("✅ BLIP model imported successfully!")
+            
         except ImportError as import_err:
-            st.warning(f"⚠️ BLIP model import failed: {str(import_err)}")
-            st.info("🔍 Debugging: Checking if models directory exists...")
+            st.error(f"⚠️ BLIP model import failed: {str(import_err)}")
+            st.info("🔍 Debugging info:")
             
             # Debug info
             current_dir = os.getcwd()
