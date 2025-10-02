@@ -30,13 +30,33 @@ def load_trained_model():
         if not os.path.exists(local_ckpt):
             try:
                 import requests
-                st.info(f"Downloading checkpoint from Google Drive... (this may take a while)")
+                st.info(f"🔄 Downloading checkpoint from Google Drive...")
+                
+                # Get file size for progress bar
+                response = requests.head(CHECKPOINT_PATH)
+                total_size = int(response.headers.get('content-length', 0))
+                
+                # Download with progress bar
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
                 with requests.get(CHECKPOINT_PATH, stream=True) as r:
                     r.raise_for_status()
+                    downloaded = 0
                     with open(local_ckpt, 'wb') as f:
                         for chunk in r.iter_content(chunk_size=8192):
-                            f.write(chunk)
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                if total_size > 0:
+                                    progress = downloaded / total_size
+                                    progress_bar.progress(progress)
+                                    status_text.text(f"Downloaded: {downloaded // (1024*1024):.1f}MB / {total_size // (1024*1024):.1f}MB ({progress*100:.1f}%)")
+                
+                progress_bar.progress(1.0)
+                status_text.text("✅ Download completed!")
                 st.success(f"Checkpoint downloaded to {local_ckpt}")
+                st.info(f"📁 Cache location: `{local_ckpt}`")
             except Exception as e:
                 st.warning(f"⚠️ Could not download checkpoint: {str(e)}")
                 dummy_config = {
@@ -63,9 +83,25 @@ def load_trained_model():
     try:
         try:
             from models.blip import blip_decoder
-            print("BLIP model imported successfully.")
-        except ImportError:
-            st.warning("⚠️ BLIP model not available. Running in DEMO mode.")
+            st.info("✅ BLIP model imported successfully!")
+        except ImportError as import_err:
+            st.warning(f"⚠️ BLIP model import failed: {str(import_err)}")
+            st.info("🔍 Debugging: Checking if models directory exists...")
+            
+            # Debug info
+            current_dir = os.getcwd()
+            models_dir = os.path.join(current_dir, 'models')
+            blip_file = os.path.join(models_dir, 'blip.py')
+            
+            st.write(f"**Current directory:** `{current_dir}`")
+            st.write(f"**Models directory exists:** {os.path.exists(models_dir)}")
+            st.write(f"**BLIP file exists:** {os.path.exists(blip_file)}")
+            
+            if os.path.exists(models_dir):
+                files = os.listdir(models_dir)
+                st.write(f"**Files in models/:** {files}")
+            
+            st.warning("⚠️ Running in DEMO mode due to import failure.")
             dummy_config = {
                 'image_size': 256,
                 'vit': 'large',
@@ -75,17 +111,28 @@ def load_trained_model():
             }
             return None, dummy_config, device
 
+        st.info(f"🔄 Loading checkpoint from: `{ckpt_path}`")
         checkpoint = torch.load(ckpt_path, map_location=device)
+        st.success("✅ Checkpoint loaded successfully!")
+        
         config = checkpoint['config']
+        st.info(f"📋 Config loaded: {config}")
+        
         model = blip_decoder(
             pretrained='',
             image_size=config['image_size'],
             vit=config['vit'],
             prompt=config.get('prompt', 'a 3d rendered car ')
         )
+        st.info("🏗️ Model architecture created!")
+        
         model.load_state_dict(checkpoint['model'])
+        st.info("💾 Model weights loaded!")
+        
         model.eval()
         model = model.to(device)
+        st.success(f"🚀 Model ready on {device}!")
+        
         return model, config, device
     except Exception as e:
         st.warning(f"⚠️ Could not load model: {str(e)}")
