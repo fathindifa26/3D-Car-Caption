@@ -138,7 +138,12 @@ def load_trained_model():
             return None, dummy_config, device
 
         st.info(f"🔄 Loading checkpoint from: `{ckpt_path}`")
-        checkpoint = torch.load(ckpt_path, map_location=device)
+        # PyTorch 2.6+ requires weights_only=False for model checkpoints
+        try:
+            checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
+        except TypeError:
+            # Fallback for older PyTorch versions
+            checkpoint = torch.load(ckpt_path, map_location=device)
         st.success("✅ Checkpoint loaded successfully!")
         
         config = checkpoint['config']
