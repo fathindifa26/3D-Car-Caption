@@ -11,16 +11,13 @@ import hashlib
 CHECKPOINT_PATH = "https://drive.usercontent.google.com/download?id=1hr8cDHAJImLc6QNNa4fvQQHjdHoDyIj5&export=download&authuser=0&confirm=t"
 
 @st.cache_resource
-def load_trained_model():
+def load_trained_model(_try_real_model=False):
     """Load trained BLIP model (cached for performance) - supports local file or Google Drive URL"""
     try:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         st.info(f"🔧 Device: {device}")
         
-        # Check if we should try to load real model
-        try_real_model = st.checkbox("🚀 Try to load real AI model (from Google Drive)", value=False, key="load_model")
-        
-        if not try_real_model:
+        if not _try_real_model:
             st.warning("⚠️ Running in DEMO mode for stability")
             dummy_config = {
                 'image_size': 256,
@@ -190,9 +187,12 @@ def main():
     st.title("🚗 3D Car Caption Generator")
     st.markdown("Upload an image of a 3D car and get an AI-generated caption about its door status!")
     
+    # Model loading option (outside of cached function)
+    try_real_model = st.checkbox("🚀 Try to load real AI model (from Google Drive)", value=False, key="load_model")
+    
     # Load model
     with st.spinner("Loading AI model..."):
-        model, config, device = load_trained_model()
+        model, config, device = load_trained_model(try_real_model)
     
     # Create columns for layout
     col1, col2 = st.columns([1, 1])
