@@ -1,9 +1,7 @@
 torch
 torchvision
 timm==0.4.12
-transformers==4.24.0
-fairscale==0.4.4
-pycocoevalcap
+transformers>=4.35.0
 ruamel.yaml
 streamlit
 requests
